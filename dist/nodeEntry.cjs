@@ -594,9 +594,455 @@ var require_merge_stream = __commonJS({
   }
 });
 
+// node_modules/ollama-node/lib/utility.js
+var require_utility = __commonJS({
+  "node_modules/ollama-node/lib/utility.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.streamingGenerate = exports.streamingPost = exports.requestPost = exports.requestDelete = exports.requestShowInfo = exports.requestList = void 0;
+    var http_1 = require("http");
+    function requestList(options) {
+      return new Promise((resolve, reject) => {
+        const req = (0, http_1.request)(options, (response) => {
+          const statusCode = response.statusCode || 0;
+          if (statusCode < 200 || statusCode > 299) {
+            return reject(new Error(`Failed with status code: ${response.statusCode}`));
+          }
+          const body = [];
+          response.on("data", (chunk) => body.push(chunk));
+          response.on("end", () => {
+            const joined = body.join("");
+            const parsed = JSON.parse(joined);
+            resolve(parsed);
+          });
+        });
+        req.on("error", reject);
+        req.end();
+      });
+    }
+    exports.requestList = requestList;
+    function requestShowInfo(options, model) {
+      return new Promise((resolve, reject) => {
+        const req = (0, http_1.request)(options, (response) => {
+          const statusCode = response.statusCode || 0;
+          if (statusCode < 200 || statusCode > 299) {
+            return reject(new Error(`Failed with status code: ${response.statusCode}`));
+          }
+          const body = [];
+          response.on("data", (chunk) => body.push(chunk));
+          response.on("end", () => {
+            const joined = body.join("");
+            const parsed = JSON.parse(joined);
+            resolve(parsed);
+          });
+        });
+        req.write(JSON.stringify({ "name": model }));
+        req.on("error", reject);
+        req.end();
+      });
+    }
+    exports.requestShowInfo = requestShowInfo;
+    function requestDelete(options, model) {
+      return new Promise((resolve, reject) => {
+        const req = (0, http_1.request)(options, (response) => {
+          const statusCode = response.statusCode || 0;
+          if (statusCode < 200 || statusCode > 299) {
+            return reject(new Error(`Failed with status code: ${response.statusCode}`));
+          }
+          const body = [];
+          response.on("data", (chunk) => body.push(chunk));
+          response.on("end", () => {
+            const joined = body.join("");
+            const parsed = JSON.parse(joined);
+            resolve(parsed);
+          });
+        });
+        req.write('{"name": "' + model + '"}');
+        req.on("error", reject);
+        req.end();
+      });
+    }
+    exports.requestDelete = requestDelete;
+    function requestPost(target, options, databody) {
+      let body = [];
+      return new Promise((resolve, reject) => {
+        const req = (0, http_1.request)(options, (response) => {
+          const statusCode = response.statusCode || 0;
+          if (statusCode < 200 || statusCode > 299) {
+            return reject(new Error(`Failed with status code: ${response.statusCode}`));
+          }
+          response.on("data", (chunk) => {
+            body.push(JSON.parse(chunk));
+          });
+          response.on("end", () => {
+            const final = body[body.length - 1];
+            const messages = body.splice(0, body.length - 1);
+            resolve({ messages, final });
+          });
+        });
+        req.write(JSON.stringify(databody));
+        req.on("error", reject);
+        req.end();
+      });
+    }
+    exports.requestPost = requestPost;
+    function streamingPost(target, options, databody, callback) {
+      const req = (0, http_1.request)(options, (res) => {
+        res.on("data", (chunk) => {
+          const chunkStr = chunk.toString();
+          const items = chunkStr.split("\n").filter(Boolean);
+          for (const item of items) {
+            callback(item);
+            if (item.includes("error")) {
+              console.log(`Error: ${JSON.parse(item).error}`);
+            }
+          }
+        });
+        res.on("error", (error) => {
+          console.error(`Response error: ${error.message}`);
+        });
+        res.on("end", () => {
+        });
+      });
+      req.on("error", (error) => {
+        console.error(`Request error: ${error.message}`);
+      });
+      req.write(JSON.stringify(databody));
+      req.end();
+    }
+    exports.streamingPost = streamingPost;
+    async function* streamingGenerate(options, model, prompt, system, template, parameters) {
+      const body = [];
+      const req = (0, http_1.request)(options);
+      req.write(JSON.stringify({ "prompt": prompt, "model": model, "system": system, "template": template, "parameters": parameters }));
+      const response = await new Promise((resolve, reject) => {
+        req.on("response", resolve);
+        req.on("error", reject);
+        req.end();
+      });
+      for await (const chunk of response) {
+        body.push(JSON.parse(chunk));
+        yield JSON.parse(chunk);
+      }
+    }
+    exports.streamingGenerate = streamingGenerate;
+  }
+});
+
+// node_modules/ollama-node/lib/ollama.js
+var require_ollama = __commonJS({
+  "node_modules/ollama-node/lib/ollama.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Ollama = void 0;
+    var utility_1 = require_utility();
+    var Ollama2 = class {
+      constructor(...args) {
+        __publicField(this, "Host");
+        __publicField(this, "Port", 11434);
+        __publicField(this, "Model", "");
+        __publicField(this, "SystemPrompt", "");
+        __publicField(this, "Template", "");
+        __publicField(this, "Parameters", {});
+        __publicField(this, "Context", []);
+        if (args.length === 0) {
+          this.Host = "127.0.0.1";
+        } else {
+          if (args[0] === "localhost") {
+            this.Host = "127.0.0.1";
+          } else {
+            this.Host = args[0];
+          }
+        }
+      }
+      async parseParams() {
+        let options = {};
+        const info = await this.showModelInfo();
+        const params = info.parameters?.split("\n").forEach((line) => {
+          const [name, value] = line.split(/\s+/).filter(Boolean);
+          if (name === "stop") {
+            if (!options.stop) {
+              options.stop = [];
+            }
+            options.stop.push(value);
+          } else {
+            options[name] = value;
+          }
+        });
+        return options;
+      }
+      async localModelExists(model) {
+        const localmodels = await this.listModels();
+        if (model.includes(":")) {
+          return localmodels.models.includes(model);
+        } else {
+          const basemodels = localmodels.models.map((m) => m.split(":")[0]);
+          return basemodels.includes(model);
+        }
+      }
+      setContext(context) {
+        this.Context = context;
+      }
+      showHost() {
+        return this.Host;
+      }
+      async setModel(model) {
+        if (await this.localModelExists(model)) {
+          this.Model = model;
+          const info = await this.showModelInfo();
+          this.Parameters = await this.parseParams();
+          this.Template = info.template || "";
+          this.SystemPrompt = info.system || "";
+        } else {
+          throw new Error(`Model ${model} not found.`);
+        }
+      }
+      setTemplate(template) {
+        this.Template = template;
+      }
+      setSystemPrompt(systemPrompt) {
+        this.SystemPrompt = systemPrompt;
+      }
+      addParameter(name, value) {
+        name = name.toLowerCase();
+        if (name === "stop") {
+          if (!this.Parameters.stop) {
+            this.Parameters.stop = [];
+          }
+          this.Parameters.stop.push(value);
+        } else {
+          this.Parameters[name] = value;
+        }
+      }
+      deleteParameter(name, value) {
+        if (name === "stop") {
+          const stops = this.Parameters.stop;
+          if (stops.includes(value)) {
+            stops.splice(stops.indexOf(value));
+            this.Parameters.stop = stops;
+          }
+        } else {
+          this.Parameters[name] = void 0;
+        }
+      }
+      deleteParameterByName(name) {
+        this.Parameters[name] = void 0;
+      }
+      deleteAllParameters() {
+        this.Parameters = {};
+      }
+      showParameters() {
+        return this.Parameters;
+      }
+      async showSystemPrompt() {
+        return this.SystemPrompt;
+      }
+      showTemplate() {
+        return this.Template;
+      }
+      showModel() {
+        return this.Model;
+      }
+      async showModelInfo() {
+        const options = {
+          hostname: this.Host,
+          port: this.Port,
+          method: "POST",
+          path: "/api/show"
+        };
+        return await (0, utility_1.requestShowInfo)(options, this.Model);
+      }
+      async listModels() {
+        const options = {
+          hostname: this.Host,
+          port: this.Port,
+          path: "/api/tags",
+          method: "GET"
+        };
+        const getResponse = await (0, utility_1.requestList)(options);
+        const complete = getResponse.models;
+        const models = complete.map((m) => m.name);
+        return { models, complete };
+      }
+      async generate(prompt) {
+        const generateOptions = {
+          hostname: this.Host,
+          port: 11434,
+          method: "POST",
+          path: "/api/generate"
+        };
+        const generateBody = {
+          model: this.Model,
+          prompt,
+          system: this.SystemPrompt,
+          template: this.Template,
+          options: this.Parameters,
+          context: this.Context
+        };
+        const genoutput = await (0, utility_1.requestPost)("generate", generateOptions, generateBody);
+        const final = genoutput.final;
+        const messages = genoutput.messages;
+        this.Context = final.context;
+        const output = messages.map((m) => m.response).join("");
+        return { output, stats: genoutput.final };
+      }
+      streamingGenerate(prompt, responseOutput = null, contextOutput = null, fullResponseOutput = null, statsOutput = null) {
+        return new Promise((resolve, reject) => {
+          const options = {
+            hostname: this.Host,
+            port: 11434,
+            method: "POST",
+            path: "/api/generate"
+          };
+          const body = {
+            model: this.Model,
+            prompt,
+            system: this.SystemPrompt,
+            template: this.Template,
+            options: this.Parameters,
+            context: this.Context
+          };
+          (0, utility_1.streamingPost)("generate", options, body, (chunk) => {
+            const jchunk = JSON.parse(chunk);
+            if (Object.hasOwn(jchunk, "response")) {
+              fullResponseOutput && fullResponseOutput(JSON.stringify(jchunk));
+              responseOutput && responseOutput(jchunk.response);
+            } else {
+              if (Object.hasOwn(jchunk, "context")) {
+                console.log(jchunk.context);
+                statsOutput && statsOutput(JSON.stringify(jchunk));
+                contextOutput && contextOutput(jchunk.context.toString());
+                this.Context = jchunk.context;
+                resolve();
+              }
+            }
+          });
+        });
+      }
+      // async delete(modelName: string) {
+      //   const options: RequestOptions = {
+      //     hostname: this.Host,
+      //     port: 11434,
+      //     method: 'DELETE',
+      //     path: '/api/delete',
+      //   }
+      //   const genoutput = await requestDelete(options, modelName);
+      //   console.log(genoutput);
+      // }
+      async create(modelName, modelPath) {
+        const createOptions = {
+          hostname: this.Host,
+          port: 11434,
+          method: "POST",
+          path: "/api/create"
+        };
+        const createBody = {
+          name: modelName,
+          path: modelPath
+        };
+        const genoutput = await (0, utility_1.requestPost)("create", createOptions, createBody);
+        const messages = genoutput.messages;
+        return messages.map((m) => m.status);
+      }
+      streamingCreate(modelName, modelPath, responseOutput = null) {
+        return new Promise((resolve, reject) => {
+          const options = {
+            hostname: this.Host,
+            port: 11434,
+            method: "POST",
+            path: "/api/create"
+          };
+          const body = {
+            name: modelName,
+            path: modelPath
+          };
+          (0, utility_1.streamingPost)("create", options, body, async (chunk) => {
+            const jchunk = JSON.parse(chunk);
+            if (Object.hasOwn(jchunk, "status")) {
+              responseOutput && responseOutput(jchunk.status);
+              if (jchunk.status === "success") {
+                resolve();
+              }
+            } else {
+              responseOutput && responseOutput(jchunk);
+            }
+          });
+        });
+      }
+      async streamingPull(modelName, responseOutput = null) {
+        return new Promise((resolve, reject) => {
+          const options = {
+            hostname: this.Host,
+            port: 11434,
+            method: "POST",
+            path: "/api/pull"
+          };
+          const body = {
+            name: modelName
+          };
+          (0, utility_1.streamingPost)("pull", options, body, async (chunk) => {
+            const jchunk = JSON.parse(chunk);
+            if (Object.hasOwn(jchunk, "status")) {
+              responseOutput && responseOutput(jchunk.status);
+            } else {
+              responseOutput && responseOutput(jchunk);
+            }
+          });
+        });
+      }
+      async streamingPush(modelName, responseOutput = null) {
+        return new Promise((resolve, reject) => {
+          const options = {
+            hostname: this.Host,
+            port: 11434,
+            method: "POST",
+            path: "/api/push"
+          };
+          const body = {
+            name: modelName
+          };
+          (0, utility_1.streamingPost)("push", options, body, async (chunk) => {
+            const jchunk = JSON.parse(chunk);
+            if (Object.hasOwn(jchunk, "status")) {
+              responseOutput && responseOutput(jchunk.status);
+            } else {
+              responseOutput && responseOutput(jchunk);
+            }
+          });
+        });
+      }
+      async copy(sourceName, destinationName) {
+        const options = {
+          hostname: this.Host,
+          port: 11434,
+          method: "POST",
+          path: "/api/copy"
+        };
+        const body = {
+          source: sourceName,
+          destination: destinationName
+        };
+        if (await this.localModelExists(sourceName)) {
+          (0, utility_1.requestPost)("copy", options, body);
+        } else {
+          return Promise.reject(new Error("Model not found"));
+        }
+      }
+      cbPrintword(chunk) {
+        process.stdout.write(chunk);
+      }
+      cbPrintLine(chunk) {
+        console.log(chunk);
+      }
+    };
+    exports.Ollama = Ollama2;
+  }
+});
+
 // src/nodeEntry.ts
 var nodeEntry_exports = {};
 __export(nodeEntry_exports, {
+  runOllamaGenerate: () => runOllamaGenerate,
   runPythonScript: () => runPythonScript
 });
 module.exports = __toCommonJS(nodeEntry_exports);
@@ -2191,6 +2637,7 @@ var $ = create$();
 
 // src/impl/runPythonScript.ts
 var import_node_path3 = require("path");
+var import_ollama_node = __toESM(require_ollama(), 1);
 async function runPythonScript(path3, args) {
   if (path3 === "") {
     path3 = (0, import_node_path3.join)(__dirname, "..", "scripts", "python-script.py");
@@ -2198,7 +2645,14 @@ async function runPythonScript(path3, args) {
   const { stdout } = await execa("python3", [path3, ...args]);
   return stdout;
 }
+async function runOllamaGenerate(modelName, prompt) {
+  const ollama = new import_ollama_node.Ollama();
+  await ollama.setModel(modelName);
+  const result = await ollama.generate(prompt);
+  return result.output;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  runOllamaGenerate,
   runPythonScript
 });

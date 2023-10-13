@@ -1,5 +1,5 @@
-// src/nodes/RunPythonScriptNode.ts
-function RunPythonScriptNode_default(rivet) {
+// src/nodes/RunOllama.ts
+function RunOllama_default(rivet) {
   const nodeImpl = {
     // This should create a new instance of your node type from scratch.
     create() {
@@ -8,13 +8,14 @@ function RunPythonScriptNode_default(rivet) {
         id: rivet.newId(),
         // This is the default data that your node will store
         data: {
-          scriptPath: "",
-          arguments: ""
+          modelName: "llama2",
+          // arguments: "",
+          prompt: "Why is the sky blue?"
         },
         // This is the default title of your node.
-        title: "Run Python Script",
+        title: "Run Ollama",
         // This must match the type of your node.
-        type: "runPythonScript",
+        type: "runOllama",
         // X and Y should be set to 0. Width should be set to a reasonable number so there is no overflow.
         visualData: {
           x: 0,
@@ -28,18 +29,18 @@ function RunPythonScriptNode_default(rivet) {
     // connection, nodes, and project are for advanced use-cases and can usually be ignored.
     getInputDefinitions(data, _connections, _nodes, _project) {
       const inputs = [];
-      if (data.useScriptPathInput) {
+      if (data.useModelNameInput) {
         inputs.push({
-          id: "scriptPath",
+          id: "modelName",
           dataType: "string",
-          title: "Script Path"
+          title: "Model Name"
         });
       }
-      if (data.useArgumentsInput) {
+      if (data.usePromptInput) {
         inputs.push({
-          id: "arguments",
-          dataType: "string[]",
-          title: "Arguments"
+          id: "prompt",
+          dataType: "string",
+          title: "Prompt"
         });
       }
       return inputs;
@@ -58,10 +59,10 @@ function RunPythonScriptNode_default(rivet) {
     // This returns UI information for your node, such as how it appears in the context menu.
     getUIData() {
       return {
-        contextMenuTitle: "Run Python Script",
-        group: "Example",
-        infoBoxBody: "This is an example of running a python script using a rivet node.",
-        infoBoxTitle: "Run Python Script Node"
+        contextMenuTitle: "Run Ollama Generate",
+        group: "Common",
+        infoBoxBody: "This will run Ollama.",
+        infoBoxTitle: "Run Ollama Generate"
       };
     },
     // This function defines all editors that appear when you edit your node.
@@ -69,15 +70,18 @@ function RunPythonScriptNode_default(rivet) {
       return [
         {
           type: "string",
-          dataKey: "scriptPath",
-          useInputToggleDataKey: "useScriptPathInput",
-          label: "Script Path"
+          dataKey: "modelName",
+          // useInputToggleDataKey: "useScriptPathInput",
+          useInputToggleDataKey: "useModelNameInput",
+          label: "Model Name"
         },
         {
           type: "string",
-          dataKey: "arguments",
-          useInputToggleDataKey: "useArgumentsInput",
-          label: "Arguments"
+          // dataKey: "arguments",
+          dataKey: "prompt",
+          // useInputToggleDataKey: "useArgumentsInput",
+          useInputToggleDataKey: "usePromptInput",
+          label: "Prompt"
         }
       ];
     },
@@ -85,7 +89,7 @@ function RunPythonScriptNode_default(rivet) {
     // what the current data of the node is in some way that is useful at a glance.
     getBody(data) {
       return rivet.dedent`
-        ${data.scriptPath} ${data.arguments}
+        ${data.modelName} ${data.prompt}
       `;
     },
     // This is the main processing function for your node. It can do whatever you like, but it must return
@@ -95,30 +99,20 @@ function RunPythonScriptNode_default(rivet) {
       if (context.executor !== "nodejs") {
         throw new Error("This node can only be run using a nodejs executor.");
       }
-      const scriptPath = rivet.getInputOrData(
+      const modelName = rivet.getInputOrData(
         data,
         inputData,
-        "scriptPath",
+        "modelName",
         "string"
       );
-      let args;
-      function splitArgs(args2) {
-        const matcher = /(?:[^\s"]+|"[^"]*")+/g;
-        return args2.match(matcher) || [];
-      }
-      const inputArguments = inputData["arguments"];
-      if (data.useArgumentsInput && inputArguments) {
-        if (rivet.isArrayDataType(inputArguments.type)) {
-          args = rivet.coerceType(inputArguments, "string[]");
-        } else {
-          const stringArgs = rivet.coerceType(inputArguments, "string");
-          args = splitArgs(stringArgs);
-        }
-      } else {
-        args = splitArgs(data.arguments);
-      }
-      const { runPythonScript } = await import("../dist/nodeEntry.cjs");
-      const output = await runPythonScript(scriptPath, args);
+      const prompt = rivet.getInputOrData(
+        data,
+        inputData,
+        "prompt",
+        "string"
+      );
+      const { runPythonScript, runOllamaGenerate } = await import("../dist/nodeEntry.cjs");
+      const output = await runOllamaGenerate(modelName, prompt);
       return {
         ["output"]: {
           type: "string",
@@ -129,28 +123,28 @@ function RunPythonScriptNode_default(rivet) {
   };
   const nodeDefinition = rivet.pluginNodeDefinition(
     nodeImpl,
-    "Run Python Script"
+    "Run Ollama"
   );
   return nodeDefinition;
 }
 
 // src/index.ts
 var initializer = (rivet) => {
-  const node = RunPythonScriptNode_default(rivet);
+  const node = RunOllama_default(rivet);
   const plugin = {
     // The ID of your plugin should be unique across all plugins.
-    id: "rivet-plugin-example-python-exec",
+    id: "rivet-ollama",
     // The name of the plugin is what is displayed in the Rivet UI.
-    name: "Rivet Plugin Example - Python Exec",
+    name: "Ollama",
     // Define all configuration settings in the configSpec object.
     configSpec: {},
     // Define any additional context menu groups your plugin adds here.
-    contextMenuGroups: [
-      {
-        id: "example",
-        label: "Example"
-      }
-    ],
+    // contextMenuGroups: [
+    //   {
+    //     id: "ollama",
+    //     label: "Ollama",
+    //   },
+    // ],
     // Register any additional nodes your plugin adds here. This is passed a `register`
     // function, which you can use to register your nodes.
     register: (register) => {

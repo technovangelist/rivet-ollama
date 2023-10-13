@@ -1,6 +1,7 @@
 <h1 align="center"><img src="https://rivet.ironcladapp.com/img/logo-banner-wide.png" alt="Rivet Logo"></h1>
 
 # Rivet Example Plugin - Python Execution
+## Converting to a Rivet Plugin for Ollama
 
 This project is an example of a [Rivet](https://github.com/Ironclad/rivet) plugin that allows you to execute Python code in a Rivet node.
 
