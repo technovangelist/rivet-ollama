@@ -3,6 +3,8 @@
 # Rivet Example Plugin - Python Execution
 ## Converting to a Rivet Plugin for Ollama
 
+This plugin is available as a NPM plugin. Just enter `rivet-ollama`
+
 This project is an example of a [Rivet](https://github.com/Ironclad/rivet) plugin that allows you to execute Python code in a Rivet node.
 
 - [Using the plugin](#using-the-plugin)
